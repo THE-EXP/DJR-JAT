@@ -17,7 +17,7 @@ const sequelize = new pg.Pool({
 async function init() {await sequelize.query("CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, balance INTEGER)").then(() => console.log("Users table created succesfully or had already existed")).catch(err => console.log(err));
 await sequelize.query(`
   CREATE TABLE IF NOT EXISTS transactions (
-    user_id INTEGER primary key,
+    user_id INTEGER not null,
     amount INTEGER NOT NULL,
     action TEXT NOT NULL,
     ts TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
@@ -42,7 +42,7 @@ app.post("/withdraw", async (req, res) => {
   try {
     const user = await sequelize.query(
       "UPDATE users SET balance = balance - $1 WHERE id = $2 RETURNING id",
-      [amount, req.user.id]
+      [amount, req.query.id]
     );
     if (!user.rowCount) {
       return res.sendStatus(404);
@@ -50,7 +50,7 @@ app.post("/withdraw", async (req, res) => {
 
     await sequelize.query(
       "INSERT INTO transactions (user_id, amount, action) VALUES ($1, $2, 'Withdraw')",
-      [req.user.id, -amount]
+      [req.query.id, -amount]
     );
     res.sendStatus(200);
   } catch (err) {
@@ -67,7 +67,7 @@ app.post("/deposit", async (req, res) => {
   try {
     const user = await sequelize.query(
       "UPDATE users SET balance = balance + $1 WHERE id = $2 RETURNING id",
-      [amount, req.user.id]
+      [amount, req.query.id]
     );
     if (!user.rowCount) {
       return res.sendStatus(404);
@@ -75,7 +75,7 @@ app.post("/deposit", async (req, res) => {
 
     await sequelize.query(
       "INSERT INTO transactions (user_id, amount, action) VALUES ($1, $2, 'Deposit')",
-      [req.user.id, amount]
+      [req.query.id, amount]
     );
     res.sendStatus(200);
   } catch (err) {
@@ -84,4 +84,20 @@ app.post("/deposit", async (req, res) => {
   }
 });
 
+
+app.get("/balance", async (req, res) => {
+  try {
+    const user = await sequelize.query(
+      "SELECT balance FROM users WHERE id = $1",
+      [req.query.id]
+    );
+    if (!user.rowCount) {
+      return res.sendStatus(404);
+    }
+    res.send({ balance: user.rows[0].balance });
+  } catch (err) {
+    console.log("Error:", err);
+    res.sendStatus(500);
+  }
+});
 

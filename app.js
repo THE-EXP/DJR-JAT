@@ -37,17 +37,25 @@ app.listen(process.env.MAINPORT || 8080, () => console.log("Server started on po
 
 app.post("/withdraw", async (req, res) => {
   const { amount } = req.query;
-  if (!amount) return res.sendStatus(400);
+  if (!amount) return res.status(400).send("Missing amount");
 
   try {
     const user = await sequelize.query(
-      "UPDATE users SET balance = balance - $1 WHERE id = $2 RETURNING id",
-      [amount, req.query.id]
+      "SELECT balance FROM users WHERE id = $1 FOR UPDATE",
+      [req.query.id]
     );
     if (!user.rowCount) {
       return res.sendStatus(404);
     }
+    if (user.rows[0].balance < amount) {
+      res.status(400).send("Insufficient funds");
+      return;
+    }
 
+    await sequelize.query(
+      "UPDATE users SET balance = balance - $1 WHERE id = $2",
+      [amount, req.query.id]
+    );
     await sequelize.query(
       "INSERT INTO transactions (user_id, amount, action) VALUES ($1, $2, 'Withdraw')",
       [req.query.id, -amount]
@@ -58,6 +66,8 @@ app.post("/withdraw", async (req, res) => {
     res.sendStatus(500);
   }
 });
+
+
 
 
 app.post("/deposit", async (req, res) => {
